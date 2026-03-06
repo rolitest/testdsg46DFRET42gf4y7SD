@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+############################################
+# GLOBAL CONFIG (VAST SAFE)
+############################################
+VENV="/venv/main"
+WORKSPACE="/workspace"
+COMFY_DIR="$WORKSPACE/ComfyUI"
+MARKER="$WORKSPACE/.custom_provisioned"
+
+PYTHON="$VENV/bin/python"
+CMCLI="$COMFY_DIR/custom_nodes/ComfyUI-Manager/cm-cli.py"
+
+############################################
+# PREVENT DOUBLE RUN
+############################################
+if [[ -f "$MARKER" ]]; then
+  echo "âœ… Custom provisioning already completed, skipping"
+  exit 0
+fi
+
+############################################
+# WAIT FOR NETWORK
+############################################
+echo "â³ Waiting for network..."
+for i in {1..40}; do
+  if getent hosts github.com >/dev/null 2>&1; then
+    echo "âœ… Network ready"
+    break
+  fi
+  sleep 2
+done
+
+############################################
+# WAIT FOR COMFYUI MANAGER
+############################################
+echo "â³ Waiting for ComfyUI-Manager..."
+for i in {1..60}; do
+  if [[ -f "$CMCLI" ]]; then
+    echo "âœ… ComfyUI-Manager detected"
+    break
+  fi
+  sleep 2
+done
+
+if [[ ! -f "$CMCLI" ]]; then
+  echo "âŒ ComfyUI-Manager CLI not found, aborting"
+  exit 1
+fi
+
+############################################
+# BASIC SANITY
+############################################
+if [[ ! -x "$PYTHON" ]]; then
+  echo "âŒ Python not found at $PYTHON"
+  exit 1
+fi
+
+echo "========================================="
+echo "ðŸš€ Custom provisioning started"
+echo "Python: $($PYTHON --version)"
+echo "ComfyUI: $COMFY_DIR"
+echo "========================================="
+
+############################################
+# CUSTOM NODES
+############################################
+echo "ðŸ§© Installing custom nodes"
+
+$PYTHON "$CMCLI" install https://github.com/rgthree/rgthree-comfy || true
+$PYTHON "$CMCLI" install https://github.com/Artificial-Sweetener/comfyui-WhiteRabbit || true
+$PYTHON "$CMCLI" install https://github.com/kijai/ComfyUI-WanVideoWrapper || true
+$PYTHON "$CMCLI" install https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite || true
+$PYTHON "$CMCLI" install https://github.com/nuvulabs/ComfyUI-Nuvu || true
+$PYTHON "$CMCLI" install https://github.com/Smirnov75/ComfyUI-mxToolkit || true
+$PYTHON "$CMCLI" install https://github.com/kijai/ComfyUI-KJNodes || true
+$PYTHON "$CMCLI" install https://github.com/city96/ComfyUI-GGUF || true
+$PYTHON "$CMCLI" install https://github.com/Fannovel16/ComfyUI-Frame-Interpolation || true
+$PYTHON "$CMCLI" install https://github.com/rdancer/ComfyUI_Florence2SAM2 || true
+$PYTHON "$CMCLI" install https://github.com/yolain/ComfyUI-Easy-Use || true
+$PYTHON "$CMCLI" install https://github.com/cubiq/ComfyUI_essentials || true
+$PYTHON "$CMCLI" install https://github.com/melMass/comfy_mtb || true
+
+############################################
+# DOWNLOAD HELPER
+############################################
+dl() {
+  local url="$1"
+  local dest="$2"
+
+  mkdir -p "$(dirname "$dest")"
+
+  if [[ -f "$dest" ]]; then
+    echo "âœ… Already exists: $(basename "$dest")"
+    return 0
+  fi
+
+  echo "â¬‡ï¸  Downloading: $(basename "$dest")"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -L --fail --retry 5 --retry-delay 2 -o "$dest" "$url"
+  else
+    wget -c -O "$dest" "$url"
+  fi
+}
+
+############################################
+# CHECKPOINTS
+############################################
+echo "ðŸ“¦ Checkpoints"
+mkdir -p "$COMFY_DIR/models/checkpoints"
+
+dl \
+"https://huggingface.co/xroli/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9/resolve/main/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors?download=true" \
+"$COMFY_DIR/models/checkpoints/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors"
+
+dl \
+"https://huggingface.co/xroli/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9/resolve/main/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors?download=true" \
+"$COMFY_DIR/models/checkpoints/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors"
+
+############################################
+# VAE
+############################################
+echo "ðŸ“¦ VAE"
+mkdir -p "$COMFY_DIR/models/vae"
+
+dl \
+"https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=true" \
+"$COMFY_DIR/models/vae/wan_2.1_vae.safetensors"
+
+############################################
+# TEXT ENCODER
+############################################
+echo "ðŸ“¦ Text Encoder"
+mkdir -p "$COMFY_DIR/models/text_encoders"
+
+dl \
+"https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp16.safetensors?download=true" \
+"$COMFY_DIR/models/text_encoders/umt5_xxl_fp16.safetensors"
+
+############################################
+# LORAS
+############################################
+echo "ðŸ“¦ Text Encoder"
+mkdir -p "$COMFY_DIR/models/loras"
+
+dl \
+"https://civitai.com/api/download/models/1694292?type=Model&format=SafeTensor" \
+"$COMFY_DIR/models/loras/fingering_i2v_e248.safetensors"
+
+dl \
+"https://civitai.com/api/download/models/1590885?type=Model&format=SafeTensor" \
+"$COMFY_DIR/models/loras/creampie-shura.safetensors"
+
+dl \
+"https://civitai.com/api/download/models/2033053?type=Model&format=SafeTensor" \
+"$COMFY_DIR/models/loras/better-anime-sex-face-v4.safetensors"
+
+############################################
+# MARK SUCCESS
+############################################
+touch "$MARKER"
+
+echo "========================================="
+echo "âœ… Custom provisioning COMPLETE"
+echo "========================================="
